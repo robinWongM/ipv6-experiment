@@ -1,11 +1,12 @@
 //@ts-check
-const { chromium } = require('playwright');
+const { chromium, errors } = require('playwright');
 const { Client: PostgresClient } = require('pg');
 const logger = require('pino')();
 require('dotenv').config();
 
-const REFRESH_THRESHOLD = 233;
-const PAGE_URL = 'https://www.weibo.com/hot/';
+const REFRESH_THRESHOLD = parseInt(process.env.REFRESH_THRESHOLD, 10) || 166;
+const RESTART_THRESHOLD = parseInt(process.env.RESTART_THRESHOLD, 10) || 30;
+const PAGE_URL = process.env.PAGE_URL || 'https://www.weibo.com/hot/';
 
 async function initDatabase() {
     const client = new PostgresClient({
@@ -82,54 +83,71 @@ function observeNetworkActivities(page, dbClient) {
 async function runTest(page) {
     const height = await page.evaluate('window.innerHeight');
 
-    while (true) {
-        try {
-            logger.info('[Refresh] start');
-            await page.goto(PAGE_URL);
-            logger.info('[Refresh] done');
-        } catch (e) {
-            // If the navigation is timeout, retry
+    try {
+        logger.info('[Refresh] start');
+        await page.goto(PAGE_URL);
+        logger.info('[Refresh] done');
+    } catch (e) {
+        // If the navigation is timeout, retry
+        if (e instanceof errors.TimeoutError) {
             logger.warn('[Refresh] timeout');
-            continue;
+            return;
+        } else {
+            throw e;
         }
-        
-        for (let i = 0; i < REFRESH_THRESHOLD; i++) {
-            const images = page.locator(`.woo-picture-slot:visible:below([role="navigation"], ${height})`);
-            const firstImage = images.first();
+    }
+    
+    for (let i = 0; i < REFRESH_THRESHOLD; i++) {
+        const images = page.locator(`.woo-picture-slot:visible:below([role="navigation"], ${height})`);
+        const firstImage = images.first();
 
-            await firstImage.click({
-                timeout: 1000,
-            })
-            .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
-                state: 'attached',
-                timeout: 1000,
-            }))
-            .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
-                state: 'detached',
-                timeout: 30000,
-            }))
-            .then(() => page.waitForTimeout(1000))
-            .then(() => logger.info(`[ClickImage] ${i}/${REFRESH_THRESHOLD} clicked`))
-            .catch(() => logger.info(`[ClickImage] ${i}/${REFRESH_THRESHOLD} timeout`));
+        await firstImage.click({
+            timeout: 1000,
+        })
+        .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
+            state: 'attached',
+            timeout: 1000,
+        }))
+        .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
+            state: 'detached',
+            timeout: 30000,
+        }))
+        .then(() => page.waitForTimeout(1000))
+        .then(() => logger.info(`[ClickImage] ${i}/${REFRESH_THRESHOLD} clicked`))
+        .catch(() => logger.info(`[ClickImage] ${i}/${REFRESH_THRESHOLD} timeout`));
 
-            await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
 
-            await page.waitForTimeout(500);
+        await page.waitForTimeout(500);
 
-            await page.keyboard.press("PageDown");
+        await page.keyboard.press("PageDown");
 
-            await page.waitForTimeout(1000);
+        await page.waitForTimeout(1000);
 
-            logger.info(`[Scrolling] ${i}/${REFRESH_THRESHOLD} done`);
-        }
+        logger.info(`[Scrolling] ${i}/${REFRESH_THRESHOLD} done`);
     }
 }
 
-(async () => {
+(async function loop() {
     const dbClient = await initDatabase();
     const page = await launchBrowser();
 
     observeNetworkActivities(page, dbClient);
 
-    await runTest(page);
+    let testStartTime = +new Date();
+
+    for (;;) {
+        try {
+            if (+new Date() - testStartTime > 1000 * 60 * RESTART_THRESHOLD) {
+                throw new Error('[Test] threshold reached');
+            }
+            await runTest(page);
+        } catch (e) {
+            await page.context().browser().close().catch(() => { });
+            await dbClient.end().catch(() => { });
+            logger.info('[Test] restarting browser');
+            setTimeout(loop, 0);
+            break;
+        }
+    }
 })();
