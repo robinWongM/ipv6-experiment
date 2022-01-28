@@ -46,37 +46,41 @@ async function launchBrowser() {
 
 function observeNetworkActivities(page, dbClient) {
     page.on('requestfinished', async (req) => {
-        const res = await req.response();
-        const { requestBodySize, requestHeadersSize, responseBodySize, responseHeadersSize } = await req.sizes();
-        const { startTime, domainLookupStart, domainLookupEnd, connectStart, secureConnectionStart, connectEnd, requestStart, responseStart, responseEnd } = req.timing();
+        try {
+            const res = await req.response();
+            const { requestBodySize, requestHeadersSize, responseBodySize, responseHeadersSize } = await req.sizes();
+            const { startTime, domainLookupStart, domainLookupEnd, connectStart, secureConnectionStart, connectEnd, requestStart, responseStart, responseEnd } = req.timing();
 
-        await dbClient.query(`
+            await dbClient.query(`
             INSERT INTO ipv6.request (url, resource_type, request_headers_size, request_body_size, 
                 response_headers_size, response_body_size, ip, start_time, domain_lookup_start, 
                 domain_lookup_end, connect_start, secure_connection_start, connect_end, 
                 request_start, response_start, response_end, environment, domain)
             VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0), $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         `, [
-            req.url(),
-            req.resourceType(),
-            requestHeadersSize,
-            requestBodySize,
-            responseHeadersSize,
-            responseBodySize,
-            (await res.serverAddr())?.ipAddress,
-            startTime,
-            domainLookupStart,
-            domainLookupEnd,
-            connectStart,
-            secureConnectionStart,
-            connectEnd,
-            requestStart,
-            responseStart,
-            responseEnd,
-            process.env.IPV6_ENVIRONMENT,
-            new URL(req.url()).hostname,
-        ]);
-        logger.debug(`[Request] ${req.url()}`);
+                req.url(),
+                req.resourceType(),
+                requestHeadersSize,
+                requestBodySize,
+                responseHeadersSize,
+                responseBodySize,
+                (await res.serverAddr())?.ipAddress,
+                startTime,
+                domainLookupStart,
+                domainLookupEnd,
+                connectStart,
+                secureConnectionStart,
+                connectEnd,
+                requestStart,
+                responseStart,
+                responseEnd,
+                process.env.IPV6_ENVIRONMENT,
+                new URL(req.url()).hostname,
+            ]);
+            logger.debug(`[Request] ${req.url()}`);
+        } catch (e) {
+            logger.warn(`[Request] handling error`);
+        }
     });
 }
 
