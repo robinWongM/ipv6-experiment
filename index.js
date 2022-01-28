@@ -98,9 +98,12 @@ async function runTest(page) {
             const firstImage = images.first();
 
             await firstImage.click({
-                timeout: 500,
+                timeout: 1000,
             })
-            .then(() => page.waitForTimeout(500))
+            .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
+                state: 'attached',
+                timeout: 1000,
+            }))
             .then(() => page.waitForSelector('svg[class^="CircleProgress"]', {
                 state: 'detached',
                 timeout: 30000,
