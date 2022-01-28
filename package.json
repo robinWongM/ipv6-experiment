@@ -1,0 +1,20 @@
+{
+  "name": "ipv6-experiment",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^14.3.2",
+    "pg": "^8.7.1",
+    "pino": "^7.6.4",
+    "playwright": "^1.18.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.6.4"
+  }
+}
