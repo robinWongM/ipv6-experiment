@@ -138,20 +138,15 @@ async function runTest(page) {
 
     observeNetworkActivities(page, dbClient);
 
-    let testStartTime = +new Date();
+    setTimeout(() => {
+        process.exit();
+    }, 1000 * 60 * RESTART_THRESHOLD);
 
     for (;;) {
         try {
-            if (+new Date() - testStartTime > 1000 * 60 * RESTART_THRESHOLD) {
-                throw new Error('[Test] threshold reached');
-            }
             await runTest(page);
         } catch (e) {
-            await page.context().browser().close().catch(() => { });
-            await dbClient.end().catch(() => { });
-            logger.info('[Test] restarting browser');
-            setTimeout(loop, 0);
-            break;
+            process.exit(1);
         }
     }
 })();
