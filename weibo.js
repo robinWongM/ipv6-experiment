@@ -149,4 +149,6 @@ async function runTest(page) {
             process.exit(1);
         }
     }
-})();
+})().catch(() => {
+    process.exit(1);
+});
